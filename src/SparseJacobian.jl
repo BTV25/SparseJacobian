@@ -1,15 +1,11 @@
 module SparseJacobian
 
-import SNOW
-import Snopt
 import DelimitedFiles
 import ForwardDiff
-import FLOWFarm; const ff = FLOWFarm
-import SparseArrays
+import FLOWFarm
 import LinearAlgebra
 import SparsityDetection, SparseArrays, SparseDiffTools
 import FLOWMath: gradient
-import LinearAlgebra
 import Colors
 import Traceur
 
@@ -446,4 +442,6 @@ end
 spacing_wrapper(x) = spacing_wrapper(x, params)
 aep_wrapper(x) = aep_wrapper(x, params)
 boundary_wrapper(x) = boundary_wrapper(x, params)
+
+const ff = FLOWFarm
 end
