@@ -1,17 +1,17 @@
 module SparseJacobian
 
-using SNOW
-using Snopt
-using DelimitedFiles
+import SNOW
+import Snopt
+import DelimitedFiles
 import ForwardDiff
 import FLOWFarm; const ff = FLOWFarm
-using SparseArrays
-using LinearAlgebra
-using SparsityDetection, SparseArrays, SparseDiffTools
-using FLOWMath: gradient
-using LinearAlgebra
-using Colors
-using Traceur
+import SparseArrays
+import LinearAlgebra
+import SparsityDetection, SparseArrays, SparseDiffTools
+import FLOWMath: gradient
+import LinearAlgebra
+import Colors
+import Traceur
 
 ## Derivative calculation
 function sparseAEPJacobian!(x::Vector{Float64},params,deriv)
