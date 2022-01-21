@@ -1,13 +1,13 @@
 module SparseJacobian
 
-import DelimitedFiles
+using DelimitedFiles
 import ForwardDiff
 import FLOWFarm
-import LinearAlgebra
-import SparsityDetection, SparseArrays, SparseDiffTools
-import FLOWMath: gradient
-import Colors
-import Traceur
+using LinearAlgebra
+using SparsityDetection, SparseArrays, SparseDiffTools
+using FLOWMath: gradient
+using Colors
+using Traceur
 
 ## Derivative calculation
 function sparseAEPJacobian!(x::Vector{Float64},params,deriv)
@@ -430,7 +430,7 @@ function loadRoundFarm(dirs,num,angle)
     boundary_center = [0.0,0.0]
     boundary_radius = 1225.8227848101264
     
-    params = params_struct(model_set, rotor_points_y, rotor_points_z, turbine_z, 
+    global params = params_struct(model_set, rotor_points_y, rotor_points_z, turbine_z, 
     rotor_diameter, boundary_center, boundary_radius, obj_scale, hub_height, turbine_yaw, 
     ct_models, generator_efficiency, cut_in_speed, cut_out_speed, rated_speed, rated_power, 
     windresource, power_models, [0], dx, [spzeros(nturbines, 2*nturbines)], spzeros(2*nturbines));
