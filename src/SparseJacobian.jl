@@ -305,7 +305,7 @@ end
 ## num is number of turbines 38 is standard
 ## angle is angle of the farm, 0 is default
 ## returns turbine_x,turbine_y,params
-function loadRoundFarm(dirs,num,angle)
+function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     cd("/Users/benjaminvarela/.julia/dev/FLOWFarm/test")
 
     # scale objective to be between 0.1 and 1
@@ -428,7 +428,7 @@ function loadRoundFarm(dirs,num,angle)
     
     # set wind farm boundary parameters
     boundary_center = [0.0,0.0]
-    boundary_radius = 1225.8227848101264
+    boundary_radius = radius
     
     global params = params_struct(model_set, rotor_points_y, rotor_points_z, turbine_z, 
     rotor_diameter, boundary_center, boundary_radius, obj_scale, hub_height, turbine_yaw, 
@@ -438,6 +438,65 @@ function loadRoundFarm(dirs,num,angle)
     return turbine_x,turbine_y,params
 end
 
+## function to be build different sized farms 
+## num is rings of turbines
+## dirs is number of wind directions 12, 72, 1
+## angle is angle of the farm, 0 is default
+## returns turbine_x,turbine_y,params
+function buildRoundFarm(dirs,rings,angle)
+    x,y = roundFarms(rings)
+    xTemp,yTemp,params = loadRoundFarm(dirs,length(x),angle,maximum(x))
+
+    return x,y,params
+end
+
+function roundFarms(rings)
+    dr = 5.107594936708861
+    diameter = 80
+    x = zeros(1)
+    y = zeros(1)
+    
+    for i = 1:rings
+        r = dr * i
+        angle,numTurbines = calculateAngle(r,dr)
+        for i = 1:numTurbines
+            x = [x;r*cos(angle*(i-1))]
+            y = [y;r*sin(angle*(i-1))]
+        end
+    end
+
+    return x .*diameter,y .*diameter
+end
+
+function calculateAngle(r,dr)
+    angle = 0
+    dr = floor(dr)
+    numTurbines = 25
+    first = zeros(2)
+    second = zeros(2)
+    while true
+        angle = 2*pi/numTurbines
+        first = [r;0]
+        second = [r*cos(angle);r*sin(angle)]
+        diff = first .- second
+        d = hypot(diff[1],diff[2])
+        if d < dr
+            numTurbines = numTurbines - 1
+        else
+            angleTemp = 2*pi/(numTurbines+1)
+            first = [r;0]
+            second = [r*cos(angleTemp);r*sin(angleTemp)]
+            diff = first .- second
+            dCheck = hypot(diff[1],diff[2])
+            if dCheck < dr
+                break
+            else
+                numTurbines = numTurbines * 1.5
+            end
+        end
+    end
+    return angle,numTurbines
+end
 
 spacing_wrapper(x) = spacing_wrapper(x, params)
 aep_wrapper(x) = aep_wrapper(x, params)
