@@ -4,7 +4,7 @@ using DelimitedFiles
 import ForwardDiff
 import FLOWFarm
 using LinearAlgebra
-using SparsityDetection, SparseArrays, SparseDiffTools
+using SparseArrays, SparseDiffTools
 using FLOWMath: gradient
 using Colors
 using Traceur
@@ -491,7 +491,7 @@ function calculateAngle(r,dr)
             if dCheck < dr
                 break
             else
-                numTurbines = numTurbines * 1.5
+                numTurbines = Int(numTurbines * 2)
             end
         end
     end
