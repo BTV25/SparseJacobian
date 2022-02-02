@@ -309,10 +309,10 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     cd("/Users/benjaminvarela/.julia/dev/FLOWFarm/test")
 
     # scale objective to be between 0.1 and 1
-    if num == 38
+    if num >= 19
         obj_scale = 1E-18
-    elseif num > 38
-        obj_scale = 1E-18
+    elseif num == 7
+        obj_scale = 1E-17
     else
         obj_scale = 1E-13
     end
