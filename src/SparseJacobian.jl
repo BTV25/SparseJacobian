@@ -311,6 +311,8 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     # scale objective to be between 0.1 and 1
     if num == 38
         obj_scale = 1E-18
+    elseif num > 38
+        obj_scale = 1E-18
     else
         obj_scale = 1E-13
     end
