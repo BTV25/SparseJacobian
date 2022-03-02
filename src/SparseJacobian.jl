@@ -17,7 +17,6 @@ function sparseAEPJacobian!(x::Vector{Float64},params,deriv)
         calculateSparsityPattern!(x,deriv.pattern,params,i,deriv.sorted_index)
 
         if !isequal(deriv.pattern,deriv.patterns[:,:,i])
-        # if !isequal(sum(x->x>0,deriv.pattern),sum(x->x>0,deriv.patterns[:,:,i]))
             deriv.patterns[:,:,i] .= deriv.pattern
             allocateNewCache!(x,deriv,i)
         end
@@ -146,7 +145,7 @@ function allocateContainers(x::Vector{Float64},params)
 end
 
 ## Optimization calculations
-function opt!(g,df,dg,x)
+function opt!(g,df,dg,x,params)
     # calculate spacing constraint value and jacobian
     spacing_con = spacing_wrapper(x)
 
@@ -269,12 +268,13 @@ function aep_wrapper(x, params)
     return [AEP]
 end
 
-function p_wrapper(x)
+function p_wrapper(x,state)
     n = Int(length(x)/2)
     turbine_x = x[1:n]
     turbine_y = x[n+1:end]
 
     rot_x, rot_y = ff.rotate_to_wind_direction(turbine_x, turbine_y, params.windresource.wind_directions[state])
+
     sorted_turbine_index = sortperm(rot_x)
     turbine_velocities = ff.turbine_velocities_one_direction(rot_x, rot_y, params.turbine_z, params.rotor_diameter, params.hub_height, params.turbine_yaw,
                             sorted_turbine_index, params.ct_models, params.rotor_points_y, params.rotor_points_z, params.windresource,
@@ -503,6 +503,187 @@ end
 spacing_wrapper(x) = spacing_wrapper(x, params)
 aep_wrapper(x) = aep_wrapper(x, params)
 boundary_wrapper(x) = boundary_wrapper(x, params)
+opt!(g,df,dg,x) = opt!(g,df,dg,x,params)
 
 const ff = FLOWFarm
+
+function calculateSingleSparsityPattern!(x::Vector{Float64},pattern::Matrix{Float64},params,currentState::Int64,sorted_index::Vector{Int64})
+    n = Int(length(x)/2)
+    rot_x, rot_y = ff.rotate_to_wind_direction(x[1:n],x[n+1:end],params.windresource.wind_directions[currentState])::Tuple{Vector{Float64}, Vector{Float64}}
+    rot_x .= rot_x ./ params.rotor_diameter
+    rot_y .= rot_y ./ params.rotor_diameter
+    pattern .= 0
+    sorted_index .= sortperm(rot_x)::Vector{Int64}
+    dx = 4
+    d = 4.5 + tand(37.5)*dx
+    
+    # determine if current turbine is affected by the other turbines
+    for i = 1:Int(length(x)/2)
+        xCurrent = rot_x[i]
+        yCurrent = rot_y[i]
+        for j = 1:Int(length(x)/2)
+            jt = sorted_index[j]
+            xOther = rot_x[jt]
+            xdif = xCurrent - xOther
+            if i == jt
+                pattern[i,jt+n] = 1.0
+                pattern[i,jt] = 1.0
+                continue
+            elseif xdif < -dx
+                break
+            end
+
+            yOther = rot_y[jt]
+            if yOther < yCurrent
+                yOther = 2*yCurrent - yOther
+            end
+
+            ydif = yOther - yCurrent
+
+            if ydif < d
+                pattern[i,jt+n] = 1.0
+                pattern[i,jt] = 1.0
+                continue
+            elseif ydif > (d + (xdif+dx)*tand(15)) #15
+                continue
+            else
+                pattern[i,jt+n] = 1.0
+                pattern[i,jt] = 1.0
+            end
+        end
+    end
+end
+
+function calculateSingleSparsityPattern2!(x::Vector{Float64},pattern::Matrix{Float64},params,currentState::Int64,sorted_index::Vector{Int64})
+    n = Int(length(x)/2)
+    rot_x, rot_y = ff.rotate_to_wind_direction(x[1:n],x[n+1:end],params.windresource.wind_directions[currentState])::Tuple{Vector{Float64}, Vector{Float64}}
+    rot_x .= rot_x ./ params.rotor_diameter
+    rot_y .= rot_y ./ params.rotor_diameter
+    pattern .= 0
+    sorted_index .= sortperm(rot_x)::Vector{Int64}
+    d = 2.5
+    dx = 28
+
+    # determine if current turbine is affected by the other turbines
+    for i = 1:Int(length(x)/2)
+        xCurrent = rot_x[i]
+        yCurrent = rot_y[i]
+        for j = 1:Int(length(x)/2)
+            jt = sorted_index[j]
+            xOther = rot_x[jt]
+            xdif = xCurrent - xOther
+            if i == jt
+                pattern[i,jt+n] = 1.0
+                pattern[i,jt] = 1.0
+                continue
+            elseif xdif < 0
+                break
+            elseif xdif > dx
+                continue
+            end
+
+            yOther = rot_y[jt]
+            ydif = yOther - yCurrent
+
+            if abs(ydif) <= d
+                pattern[i,jt+n] = 1.0
+                pattern[i,jt] = 1.0
+                continue
+            end
+        end
+        temp = pattern[i,:]
+        temp = temp[temp .> 0.0]
+        if length(temp) == 2
+            pattern[i,:] .= 0
+        end
+    end
+end
+
+function fillPattern!(pattern)
+    colors = matrix_colors(sparse(pattern))
+    for i = 1:maximum(colors)
+        cols = findall(x-> x == i,colors)
+        smallPattern = pattern[:,cols]
+        singleCol = zeros(size(smallPattern,1))
+        singleCol .= sum(smallPattern,dims=2)
+        rows = findall(x-> x == 0,singleCol)
+        count = 1
+        for j = 1:length(rows)
+            pattern[rows[j],cols[count]] = 1
+            if count == length(cols)
+                count = 1
+            else
+                count += 1
+            end
+        end
+    end
+end
+
+function opt_fast_single!(g,df,dg,x,deriv)
+    # calculate spacing constraint value and jacobian
+    spacing_con = spacing_wrapper(x)
+
+    # calculate boundary constraint and jacobian
+    boundary_con = boundary_wrapper(x)
+
+    # combine constaint values and jacobians into overall constaint value and jacobian arrays
+    c = [spacing_con; boundary_con]
+    g[:] = c[:]
+
+    # calculate the objective function and jacobian (negative sign in order to maximize AEP)
+    AEP = -aep_wrapper(x)[1]
+
+    sparseAEPJacobianSingle!(x,params,deriv)
+
+    df[:] = -deriv.Jacobian
+    ds_dx = ForwardDiff.jacobian(spacing_wrapper, x)
+    db_dx = ForwardDiff.jacobian(boundary_wrapper, x)
+    dcdx = [ds_dx; db_dx]
+    dg[:] = dcdx[:]
+
+    return AEP
+end
+
+function sparseAEPJacobianSingle!(x::Vector{Float64},params,deriv)
+    deriv.Jacobian .= 0
+    for i = 1:length(params.windresource.wind_directions)
+        # calculate state Jacobian
+        calculateSparseJacobian!(x,deriv,i)
+
+        # sum jacobian columns and add to other states
+        deriv.Jacobian .= deriv.Jacobian .+ transpose(sum(deriv.jac,dims = 1) .* params.windresource.wind_probabilities[i])
+    end
+    deriv.Jacobian .= deriv.Jacobian .* params.obj_scale .* 365.25 .* 24
+end
+
+function allocateContainers(x::Vector{Float64},params,pattern)
+    n = Int(length(x)/2)
+    numStates = length(params.windresource.wind_directions)
+    jac = spzeros(n,n*2)
+    Jacobian = zeros(n*2)
+    patterns = zeros(n,n*2,numStates)
+    caches = Array{Any,1}(undef,numStates)
+    functions = Array{Any,1}(undef,numStates)
+    colors = zeros(Int,n*2)
+    index = zeros(Int,n)
+
+    for i = 1:numStates
+        patterns[:,:,i] .= pattern[:,:,i]
+        jac .= dropzeros(sparse(patterns[:,:,i]))
+        if iszero(jac)
+            colors = collect(Int64,1:length(colors))
+        else
+            colors = matrix_colors(jac)
+        end
+        f = (wt_power,x) -> p_wrapper!(wt_power,x,params,i)
+        functions[i] = f
+        caches[i] = ForwardColorJacCache(f,x,
+                              dx = similar(x[1:n]),
+                              colorvec=colors,
+                              sparsity = jac)
+    end
+    deriv = deriv_struct(pattern,jac,Jacobian,patterns,caches,index,functions)
+    return deriv
+end
+
 end
