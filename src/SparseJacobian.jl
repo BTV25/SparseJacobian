@@ -230,7 +230,7 @@ function boundary_wrapper(x, params)
     turbine_y = x[nturbines+1:end]
 
     # get and return boundary distances
-    return ff.circle_boundary(params.boundary_center, params.boundary_radius, turbine_x, turbine_y)
+    return ff.circle_boundary(params.boundary_center, params.boundary_radius, turbine_x, turbine_y) .* 1E-7
 end
 
 # set up spacing constraint wrapper function
@@ -244,7 +244,7 @@ function spacing_wrapper(x, params)
     turbine_y = x[nturbines+1:end]
 
     # get and return spacing distances
-    return 2.0*params.rotor_diameter[1] .- ff.turbine_spacing(turbine_x,turbine_y)
+    return (2.0*params.rotor_diameter[1] .- ff.turbine_spacing(turbine_x,turbine_y)) .* 1E-4
 end
 
 # set up objective wrapper function
@@ -313,6 +313,8 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
         obj_scale = 1E-18
     elseif num == 7
         obj_scale = 1E-17
+    elseif num == 1
+        obj_scale = 1.0
     else
         obj_scale = 1E-13
     end
@@ -457,6 +459,9 @@ function roundFarms(rings)
     diameter = 80
     x = zeros(1)
     y = zeros(1)
+    if rings == 0
+        return x .*diameter,y .*diameter
+    end
     
     for i = 1:rings
         r = dr * i
