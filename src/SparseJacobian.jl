@@ -713,10 +713,7 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
         return
     end
 
-    numF = 0
-
     function reduceColors(cut)
-        numF += 1
         if cut == 1.0
             return -numColors
         elseif cut == 0.0
@@ -741,7 +738,7 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
             left = mid
         else
             right = mid
-            println("Bracket: ",i)
+            # println("Bracket: ",i)
             break
         end
         mid = (left+right)/2
@@ -753,7 +750,7 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
         if num < 1
             right = mid
         else
-            println("Refine 1: ",k)
+            # println("Refine 1: ",k)
             break
         end
         mid = (left+right)/2
@@ -765,7 +762,7 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
         if num > 0
             left = mid
         else
-            println("Refine 2: ",k)
+            # println("Refine 2: ",k)
             break
         end
         mid = (left+right)/2
@@ -793,7 +790,6 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
         end
     end
     # println("Remove: ",i)
-    println(numF)
 end
 
 function allocateContainersCutoff(x::Vector{Float64},params,numColors)
