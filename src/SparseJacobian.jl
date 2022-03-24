@@ -708,6 +708,10 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
     p_wrapper(x) = SparseJacobian.p_wrapper(x,params,currentState)
     dense = abs.(ForwardDiff.jacobian(p_wrapper,x))
     maxJac = maximum(dense)
+    if numColors == length(x)
+        pattern .= dense
+        return
+    end
 
     function reduceColors(cut)
         if cut == 1.0
@@ -726,24 +730,39 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
     left = 0.0
     right = 1.0
     mid = 0.5
-    while true
+    for i = 1:500
         num = reduceColors(mid)
         if num < 0
             right = mid
         elseif num > 0
             left = mid
         else
+            right = mid
+            # println("Bracket: ",i)
             break
         end
         mid = (left+right)/2
     end
 
-    for k = 1:100
+    for k = 1:500
         mid = (left+right)/2
-        num = reduceColors(left)
-        if num != 0
+        num = reduceColors(mid)
+        if num < 1
+            right = mid
+        else
+            # println("Refine 1: ",k)
+            break
+        end
+        mid = (left+right)/2
+    end
+
+    for k = 1:500
+        mid = (left+right)/2
+        num = reduceColors(mid)
+        if num > 0
             left = mid
         else
+            # println("Refine 2: ",k)
             break
         end
         mid = (left+right)/2
@@ -752,6 +771,7 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
     start = left
     pattern .= copy(dense)
     pattern[pattern .< (maxJac*(start))] .= 0
+    # println("Colors: ",maximum(matrix_colors(sparse(pattern))))
 
     i = 0
     while true
@@ -769,6 +789,7 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
             break
         end
     end
+    # println("Remove: ",i)
 end
 
 function allocateContainersCutoff(x::Vector{Float64},params,numColors)
