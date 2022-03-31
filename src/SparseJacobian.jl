@@ -680,14 +680,14 @@ function opt_fast_update!(g,df,dg,x,params,deriv,numCalls)
 end
 
 ## update pattern by jacobian cutoff
-function sparseJacobianFromCutoff!(x::Vector{Float64},params,deriv,numCalls,colors)
+function sparseJacobianFromCutoff!(x::Vector{Float64},params,deriv,numCalls,cut)
     deriv.Jacobian .= 0
-    maxCalls = 0 
+    maxCalls = 0
     numCalls += 1
     for i = 1:length(params.windresource.wind_directions)
         # calculate pattern
         if numCalls > maxCalls
-            calculateSparsityPatternCutoff!(x,deriv.pattern,params,i,colors)
+            calculateSparsityPatternCutoff!(x,deriv.pattern,params,i,cut)
             deriv.patterns[:,:,i] .= deriv.pattern
             allocateNewCache!(x,deriv,i)
         end
@@ -704,7 +704,31 @@ function sparseJacobianFromCutoff!(x::Vector{Float64},params,deriv,numCalls,colo
     deriv.Jacobian .= deriv.Jacobian .* params.obj_scale .* 365.25 .* 24
 end
 
-function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Float64},params,currentState::Int64,numColors)
+function sparseJacobianFromColors!(x::Vector{Float64},params,deriv,numCalls,numColors)
+    deriv.Jacobian .= 0
+    maxCalls = 0
+    numCalls += 1
+    for i = 1:length(params.windresource.wind_directions)
+        # calculate pattern
+        if numCalls > maxCalls
+            calculateSparsityPatternColors!(x,deriv.pattern,params,i,numColors)
+            deriv.patterns[:,:,i] .= deriv.pattern
+            allocateNewCache!(x,deriv,i)
+        end
+
+        # calculate state Jacobian
+        calculateSparseJacobian!(x,deriv,i)
+
+        # sum jacobian columns and add to other states
+        deriv.Jacobian .= deriv.Jacobian .+ transpose(sum(deriv.jac,dims = 1) .* params.windresource.wind_probabilities[i])
+    end
+    if numCalls > maxCalls
+        numCalls = 0
+    end
+    deriv.Jacobian .= deriv.Jacobian .* params.obj_scale .* 365.25 .* 24
+end
+
+function calculateSparsityPatternColors!(x::Vector{Float64},pattern::Matrix{Float64},params,currentState::Int64,numColors)
     p_wrapper(x) = SparseJacobian.p_wrapper(x,params,currentState)
     dense = abs.(ForwardDiff.jacobian(p_wrapper,x))
     maxJac = maximum(dense)
@@ -792,7 +816,15 @@ function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Floa
     # println("Remove: ",i)
 end
 
-function allocateContainersCutoff(x::Vector{Float64},params,numColors)
+function calculateSparsityPatternCutoff!(x::Vector{Float64},pattern::Matrix{Float64},params,currentState::Int64,cut)
+    p_wrapper(x) = SparseJacobian.p_wrapper(x,params,currentState)
+    dense = log10.(abs.(ForwardDiff.jacobian(p_wrapper,x)) .+ 1E-200)
+    maxJac = maximum(dense)
+    pattern .= copy(dense)
+    pattern[pattern .< (maxJac-cut)] .= 0
+end
+
+function allocateContainersCutoff(x::Vector{Float64},params,cut)
     n = Int(length(x)/2)
     numStates = length(params.windresource.wind_directions)
     pattern = zeros(n,n*2)
@@ -805,7 +837,7 @@ function allocateContainersCutoff(x::Vector{Float64},params,numColors)
     index = zeros(Int,n)
 
     for i = 1:numStates
-        calculateSparsityPatternCutoff!(x,pattern,params,i,numColors)
+        calculateSparsityPatternCutoff!(x,pattern,params,i,cut)
         patterns[:,:,i] .= pattern
         jac .= dropzeros(sparse(patterns[:,:,i]))
         if iszero(jac)
@@ -822,6 +854,64 @@ function allocateContainersCutoff(x::Vector{Float64},params,numColors)
     end
     deriv = deriv_struct(pattern,jac,Jacobian,patterns,caches,index,functions)
     return deriv
+end
+
+function allocateContainersColors(x::Vector{Float64},params,numColors)
+    n = Int(length(x)/2)
+    numStates = length(params.windresource.wind_directions)
+    pattern = zeros(n,n*2)
+    jac = spzeros(n,n*2)
+    Jacobian = zeros(n*2)
+    patterns = zeros(n,n*2,numStates)
+    caches = Array{Any,1}(undef,numStates)
+    functions = Array{Any,1}(undef,numStates)
+    colors = zeros(Int,n*2)
+    index = zeros(Int,n)
+
+    for i = 1:numStates
+        calculateSparsityPatternColors!(x,pattern,params,i,numColors)
+        patterns[:,:,i] .= pattern
+        jac .= dropzeros(sparse(patterns[:,:,i]))
+        if iszero(jac)
+            colors = collect(Int64,1:length(colors))
+        else
+            colors = matrix_colors(jac)
+        end
+        f = (wt_power,x) -> p_wrapper!(wt_power,x,params,i)
+        functions[i] = f
+        caches[i] = ForwardColorJacCache(f,x,
+                              dx = similar(x[1:n]),
+                              colorvec=colors,
+                              sparsity = jac)
+    end
+    deriv = deriv_struct(pattern,jac,Jacobian,patterns,caches,index,functions)
+    return deriv
+end
+
+function opt_colors!(g,df,dg,x,params,deriv,numCalls)
+    # calculate spacing constraint value and jacobian
+    spacing_con = spacing_wrapper(x,params)
+
+    # calculate boundary constraint and jacobian
+    boundary_con = boundary_wrapper(x,params)
+
+    # combine constaint values and jacobians into overall constaint value and jacobian arrays
+    c = [spacing_con; boundary_con]
+    g[:] = c[:]
+
+    # calculate the objective function and jacobian (negative sign in order to maximize AEP)
+    AEP = -aep_wrapper(x,params)[1]
+
+    colors = Int64(length(x)/2)
+    sparseJacobianFromCutoff!(x,params,deriv,numCalls,colors)
+
+    df[:] = -deriv.Jacobian
+    ds_dx = ForwardDiff.jacobian(spacing_wrapper, x)
+    db_dx = ForwardDiff.jacobian(boundary_wrapper, x)
+    dcdx = [ds_dx; db_dx]
+    dg[:] = dcdx[:]
+
+    return AEP
 end
 
 end
