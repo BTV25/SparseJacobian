@@ -284,6 +284,24 @@ function p_wrapper(x,params,state)
                             params.rated_power, params.rotor_diameter, turbine_velocities, params.turbine_yaw, params.windresource.air_density, params.power_models)
 end
 
+function p_wrapper_scaled(x,params,state)
+    n = Int(length(x)/2)
+    turbine_x = x[1:n]
+    turbine_y = x[n+1:end]
+
+    rot_x, rot_y = ff.rotate_to_wind_direction(turbine_x, turbine_y, params.windresource.wind_directions[state])
+
+    sorted_turbine_index = sortperm(rot_x)
+    turbine_velocities = ff.turbine_velocities_one_direction(rot_x, rot_y, params.turbine_z, params.rotor_diameter, params.hub_height, params.turbine_yaw,
+                            sorted_turbine_index, params.ct_models, params.rotor_points_y, params.rotor_points_z, params.windresource,
+                            params.model_set, wind_farm_state_id=state, velocity_only=true)
+
+    wt_power = ff.turbine_powers_one_direction(params.generator_efficiency, params.cut_in_speed, params.cut_out_speed, params.rated_speed,
+                            params.rated_power, params.rotor_diameter, turbine_velocities, params.turbine_yaw, params.windresource.air_density, params.power_models)
+
+    wt_power = wt_power * params.obj_scale .* 365.25 .* 24
+end
+
 function p_wrapper!(wt_power,x,params,currentState)
     n = Int(length(x)/2)
     turbine_x = x[1:n]
@@ -701,6 +719,7 @@ function sparseJacobianFromCutoff!(x::Vector{Float64},params,deriv,numCalls,cut)
     if numCalls > maxCalls
         numCalls = 0
     end
+    deriv.jac .= deriv.jac .* params.obj_scale .* 365.25 .* 24
     deriv.Jacobian .= deriv.Jacobian .* params.obj_scale .* 365.25 .* 24
 end
 
@@ -725,6 +744,7 @@ function sparseJacobianFromColors!(x::Vector{Float64},params,deriv,numCalls,numC
     if numCalls > maxCalls
         numCalls = 0
     end
+    deriv.jac .= deriv.jac .* params.obj_scale .* 365.25 .* 24
     deriv.Jacobian .= deriv.Jacobian .* params.obj_scale .* 365.25 .* 24
 end
 
