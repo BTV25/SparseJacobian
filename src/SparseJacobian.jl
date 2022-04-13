@@ -49,7 +49,7 @@ function calculateSparsityPattern!(x::Vector{Float64},pattern::Matrix{Float64},p
     rot_y .= rot_y ./ params.rotor_diameter
     pattern .= 0
     sorted_index .= sortperm(rot_x)::Vector{Int64}
-    d = 4.5
+    d = 3.75 #4.5
     
     # determine if current turbine is affected by the other turbines
     for i = 1:Int(length(x)/2)
@@ -80,6 +80,8 @@ function calculateSparsityPattern!(x::Vector{Float64},pattern::Matrix{Float64},p
                 continue
             elseif ydif > (d + xdif*tand(15)) #15
                 continue
+            elseif ydif == 0
+                pattern[i,jt] = 1.0
             else
                 pattern[i,jt+n] = 1.0
                 pattern[i,jt] = 1.0
