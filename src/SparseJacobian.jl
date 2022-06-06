@@ -348,8 +348,13 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     turbine_y = data[:, 2].*diam
     turbine_z = zeros(nturbines)
 
-    turbine_x = turbine_x .- turbine_x[1]
-    turbine_y = turbine_y .- turbine_y[1]
+    if num != 38
+        turbine_x = zeros(num)
+        turbine_y = zeros(num)
+    end
+
+    turbine_x .= turbine_x .- turbine_x[1]
+    turbine_y .= turbine_y .- turbine_y[1]
 
     angle = 270 + angle
 
@@ -396,7 +401,6 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
         nstates = length(windspeeds)
     end
     
-    
     air_density = 1.1716  # kg/m^3
     ambient_ti = 0.077
     shearexponent = 0.15
@@ -405,6 +409,7 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     
     # load power curve
     powerdata = readdlm("inputfiles/niayifar_vestas_v80_power_curve_observed.txt",  ',', skipstart=1)
+    # powerdata = readdlm("inputfiles/NREL5MWCPCT_FLORIS_V3.csv",  ',', skipstart=1)
     velpoints = powerdata[:,1]
     powerpoints = powerdata[:,2]*1E6
     
@@ -417,6 +422,7 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     
     # load thrust curve
     ctdata = readdlm("inputfiles/predicted_ct_vestas_v80_niayifar2016.txt",  ',', skipstart=1)
+    # ctdata = readdlm("inputfiles/NREL5MWCPCT_FLORIS_V3.csv",  ',', skipstart=1)
     velpoints = ctdata[:,1]
     ctpoints = ctdata[:,2]
     
@@ -430,18 +436,17 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     # initialize wind shear model
     wind_shear_model = ff.PowerLawWindShear(shearexponent)
     
-    # get sorted indecies 
-    # sorted_turbine_index = sortperm(turbine_x)
-    
     # initialize the wind resource definition
     windresource = ff.DiscretizedWindResource(winddirections, windspeeds, windprobabilities, measurementheight, air_density, ambient_tis, wind_shear_model)
     
     # set up wake and related models
-    wakedeficitmodel = ff.GaussYawVariableSpread()
-    wakedeficitmodel.wec_factor[1] = 1.0
+    # wakedeficitmodel = ff.GaussYawVariableSpread()
+    # wakedeficitmodel.wec_factor[1] = 1.0
+    wakedeficitmodel = ff.CumulativeCurl()
     
     wakedeflectionmodel = ff.GaussYawVariableSpreadDeflection()
     wakecombinationmodel = ff.LinearLocalVelocitySuperposition()
+    # localtimodel = ff.LocalTIModelMaxTI()
     localtimodel = ff.LocalTIModelNoLocalTI()
     
     # initialize model set
@@ -910,7 +915,7 @@ function allocateContainersColors(x::Vector{Float64},params,numColors)
     return deriv
 end
 
-function opt_colors!(g,df,dg,x,params,deriv,numCalls)
+function opt_cutoff!(g,df,dg,x,params,deriv,numCalls)
     # calculate spacing constraint value and jacobian
     spacing_con = spacing_wrapper(x,params)
 
