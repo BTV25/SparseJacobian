@@ -325,7 +325,7 @@ end
 ## num is number of turbines 38 is standard
 ## angle is angle of the farm, 0 is default
 ## returns turbine_x,turbine_y,params
-function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
+function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264;CC=false)
     cd("/Users/benjaminvarela/.julia/dev/FLOWFarm/test")
 
     # scale objective to be between 0.1 and 1
@@ -340,7 +340,7 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     end
 
     # set initial turbine x and y locations
-    diam = 80.0
+    diam = 126.4
     data = readdlm("inputfiles/layout_38turb_round.txt",  ' ', skipstart=1)
     turbine_x = data[:, 1].*diam
     nturbines = length(turbine_x)
@@ -370,16 +370,16 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     
     # set turbine design parameters
     rotor_diameter = zeros(nturbines) .+ diam # m
-    hub_height = zeros(nturbines) .+ 70.0   # m
-    cut_in_speed = zeros(nturbines) .+ 0.  # m/s 4.0
+    hub_height = zeros(nturbines) .+ 90.0   # m
+    cut_in_speed = zeros(nturbines) .+ 3.  # m/s 4.0
     cut_out_speed = zeros(nturbines) .+ 25.  # m/s
-    rated_speed = zeros(nturbines) .+ 16.  # m/s
-    rated_power = zeros(nturbines) .+ 2.0E6  # W
-    generator_efficiency = zeros(nturbines) .+ 0.944
+    rated_speed = zeros(nturbines) .+ 11.4  # m/s
+    rated_power = zeros(nturbines) .+ 5.0E6  # W
+    generator_efficiency = zeros(nturbines) .+ 1.0
     
     # rotor swept area sample points (normalized by rotor radius)
-    rotor_points_y = [0.0]
-    rotor_points_z = [0.0]
+    nrotorpoints = 1
+    rotor_points_y, rotor_points_z = ff.rotor_sample_points(nrotorpoints, method="sunflower", pradius=1)
     
     # set flow parameters
     if dirs == 12
@@ -401,17 +401,17 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
         nstates = length(windspeeds)
     end
     
-    air_density = 1.1716  # kg/m^3
-    ambient_ti = 0.077
-    shearexponent = 0.15
+    air_density = 1.225  # kg/m^3
+    ambient_ti = 0.04
+    shearexponent = 0.084
     ambient_tis = zeros(nstates) .+ ambient_ti
     measurementheight = zeros(nstates) .+ hub_height[1]
     
     # load power curve
-    powerdata = readdlm("inputfiles/niayifar_vestas_v80_power_curve_observed.txt",  ',', skipstart=1)
-    # powerdata = readdlm("inputfiles/NREL5MWCPCT_FLORIS_V3.csv",  ',', skipstart=1)
+    # powerdata = readdlm("inputfiles/niayifar_vestas_v80_power_curve_observed.txt",  ',', skipstart=1)
+    powerdata = readdlm("inputfiles/NREL5MWCPCT.txt", skipstart=1)
     velpoints = powerdata[:,1]
-    powerpoints = powerdata[:,2]*1E6
+    powerpoints = powerdata[:,2]#*1E6
     
     # initialize power model
     power_model = ff.PowerModelCpPoints(velpoints, powerpoints)
@@ -421,10 +421,10 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     end
     
     # load thrust curve
-    ctdata = readdlm("inputfiles/predicted_ct_vestas_v80_niayifar2016.txt",  ',', skipstart=1)
-    # ctdata = readdlm("inputfiles/NREL5MWCPCT_FLORIS_V3.csv",  ',', skipstart=1)
+    # ctdata = readdlm("inputfiles/predicted_ct_vestas_v80_niayifar2016.txt",  ',', skipstart=1)
+    ctdata = readdlm("inputfiles/NREL5MWCPCT.txt", skipstart=1)
     velpoints = ctdata[:,1]
-    ctpoints = ctdata[:,2]
+    ctpoints = ctdata[:,3]
     
     # initialize thurst model
     ct_model = ff.ThrustModelCtPoints(velpoints, ctpoints)
@@ -440,14 +440,17 @@ function loadRoundFarm(dirs,num,angle,radius=1225.8227848101264)
     windresource = ff.DiscretizedWindResource(winddirections, windspeeds, windprobabilities, measurementheight, air_density, ambient_tis, wind_shear_model)
     
     # set up wake and related models
-    # wakedeficitmodel = ff.GaussYawVariableSpread()
-    # wakedeficitmodel.wec_factor[1] = 1.0
-    wakedeficitmodel = ff.CumulativeCurl()
+    wakedeficitmodel = []
+    if CC
+        wakedeficitmodel = ff.CumulativeCurl()
+    else
+        wakedeficitmodel = ff.GaussYawVariableSpread()
+    end
     
     wakedeflectionmodel = ff.GaussYawVariableSpreadDeflection()
     wakecombinationmodel = ff.LinearLocalVelocitySuperposition()
-    # localtimodel = ff.LocalTIModelMaxTI()
-    localtimodel = ff.LocalTIModelNoLocalTI()
+    localtimodel = ff.LocalTIModelMaxTI()
+    # localtimodel = ff.LocalTIModelNoLocalTI()
     
     # initialize model set
     model_set = ff.WindFarmModelSet(wakedeficitmodel, wakedeflectionmodel, wakecombinationmodel, localtimodel)
@@ -472,9 +475,9 @@ end
 ## dirs is number of wind directions 12, 72, 1
 ## angle is angle of the farm, 0 is default
 ## returns turbine_x,turbine_y,params
-function buildRoundFarm(dirs,rings;angle=0)
+function buildRoundFarm(dirs,rings;angle=0,CC=false)
     x,y = roundFarms(rings)
-    xTemp,yTemp,params = loadRoundFarm(dirs,length(x),angle,maximum(x))
+    xTemp,yTemp,params = loadRoundFarm(dirs,length(x),angle,maximum(x);CC=CC)
 
     return x,y,params
 end
